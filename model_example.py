@@ -48,11 +48,11 @@ def add_ResidualBlock(input):
 
     padded_GLU = layers.ZeroPadding2D(padding = ((padding,padding), (0,0)) ) (GLU)
 
-    output = layers.Conv2D(std_out_channel, (kernel_width,1),use_bias = False) (GLU)
+    output = layers.Conv2D(std_out_channel, (kernel_width,1),use_bias = False) (padded_GLU)
 
     #add the output and the input
     #thats what makes this "residual"
-    return output
+    #return output
     #sizes dont add up here for some reason, this should return below but I need
     # to find the bug
     return layers.Add()([input,output])
@@ -66,7 +66,7 @@ def add_PlainBlock(input):
 
     padded_GLU = layers.ZeroPadding2D(padding = ((padding,padding), (0,0)) ) (GLU)
 
-    output = layers.Conv2D(std_out_channel, (kernel_width,1),use_bias = False) (GLU)
+    output = layers.Conv2D(std_out_channel, (kernel_width,1),use_bias = False) (padded_GLU)
 
     return output
 
@@ -120,22 +120,20 @@ def get_model():
 def loss_fn(prediction, label):
     length = label.shape[1]
     print(label.shape, prediction.shape)
+    # prediction = tf.argmax(prediction,1)
+    # label = tf.argmax(label,1)
+
     prediction_slice = prediction[:,:length,:]
     print(prediction_slice.shape)
     return tf.keras.losses.MSE(prediction_slice, label)
 
 
-
-def load_data():
-    dataset_dir = "DataSet/SITA/"
-    dataset_name = "SITA"
+def get_raw_data(dataset_name):
+    dataset_dir = "DataSet/" + dataset_name + "/"
 
     dataset = ReadDataSet(dataset_dir, 'data.feat', 'data.lab', SeqDataSet, dataset_name)
     dataset.SetSignal()
-    batch_x, batch_y, lens_x, lens_y = dataset.NextRestrictedPaddingBatch(151)
-
-
-    #print(batch_x)
+    batch_x, batch_y, lens_x, lens_y = dataset.NextRestrictedPaddingBatch(10000)
     x = np.array( [np.array(x) for x in batch_x])
 
     x_data = np.reshape(np.array(batch_x), newshape = (x.shape[0], x.shape[1]//30, 30))
@@ -145,7 +143,33 @@ def load_data():
     y_data = np.reshape(y, newshape=(y.shape[0], y.shape[1], 1, y.shape[2]))
     return x_data, y_data
 
-inputs, labels = load_data()
+
+def load_data():
+
+
+
+    SITA_x, SITA_y = get_raw_data("SITA")
+    SITA_EX1_x, SITA_EX1_y = get_raw_data("SITA_EX1")
+    SITA_EX2_x,SITA_EX2_y = get_raw_data("SITA_EX2")
+    SITA_EX3_x, SITA_EX3_y = get_raw_data("SITA_EX3")
+
+    print(SITA_x.shape)
+    print(SITA_EX1_x.shape)
+    print(SITA_EX2_x.shape)
+    print(SITA_EX3_x.shape)
+
+    train_input = np.concatenate((SITA_EX3_x,SITA_EX1_x))
+    train_input = np.concatenate((train_input, SITA_EX2_x))
+
+    train_labels = np.concatenate((SITA_EX3_y,SITA_EX1_y))
+    train_labels = np.concatenate((train_labels, SITA_EX2_y))
+
+
+
+
+    return train_input, train_labels, SITA_x, SITA_y
+
+inputs, labels, test_inputs, test_labels = load_data()
 
 
 
@@ -157,5 +181,6 @@ model.fit(
     x=inputs,
     y=labels,
     epochs=2,
+    validation_data=(test_inputs, test_labels),
     batch_size=12,
 )
