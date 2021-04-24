@@ -7,7 +7,7 @@ from Bio.PDB.ResidueDepth import residue_depth, get_surface
 from Bio.PDB.DSSP import DSSP
 
 #keys = AA index
-#values = [residue, residue code, phi, psi, surface depth]
+#values = [residue, residue code, phi, psi, surface depth, secondary structure]
 
 result = {}
 structName = "1HMP"
@@ -23,8 +23,7 @@ def readPDBFile(structName, fileName):
         for chain in model :
 
             polypeptides = Bio.PDB.PPBuilder().build_peptides(chain)
-            dssp = DSSP(chain, fileName)
-
+            dssp = DSSP(chain, fileName, dssp = "mkdssp")
 
             for poly_index, poly in enumerate(polypeptides) :
 
@@ -53,7 +52,11 @@ def readPDBFile(structName, fileName):
                         #average depth of all atoms in residue from surface
                         depth = residue_depth(poly[residue], surface) 
 
-                        result[poly[residue].id[1]] = [res, resCode, phi, psi, depth]
+                        if (chain, poly[residue].id) in dssp:
+                            secondary = Bio.PDB.DSSP.ss_to_index(dssp[(chain, poly[residue].id)][2])
+                            energyList = list(dssp[(chain, poly[residue].id)][6:])
+
+                        result[poly[residue].id[1]] = [res, resCode, phi, psi, depth, secondary] + energyList
     print(result)
     return result
 
