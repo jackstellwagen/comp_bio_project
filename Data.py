@@ -8,7 +8,7 @@ from Bio.PDB.DSSP import DSSP
 from Bio.PDB import Selection
 
 #keys = AA index
-#values = [residue, residue code, phi, psi, surface depth, 
+#values = [residue, residue code, x, y, z, phi, psi, surface depth, 
 #          number of atoms within a certain distance, secondary structure, 
 #          NH_O_1_relidx, NH_O_1_energy, O_NH_1_relidx, O_NH_1_energy,
 #          NH_O_2_relidx, NH_O_2_energy, O_NH_2_relidx, O_NH_2_energy]
@@ -42,6 +42,7 @@ def readPDBFile(structName, fileName):
                     if poly[residue].id[1] not in result:
 
                         res = poly[residue].resname
+                        x,y,z = poly[residue]["CA"].coord
 
                         #encoded as int from 0-1
                         resCode = Bio.PDB.Polypeptide.three_to_index(poly[residue].resname)/20
@@ -60,14 +61,14 @@ def readPDBFile(structName, fileName):
                         atoms  = Bio.PDB.Selection.unfold_entities(chain, "A")
                         ns = Bio.PDB.NeighborSearch(atoms)
                         searchRadius = 5
-                        close_atoms = ns.search(poly[residue]["CA"].coord, searchRadius)
+                        closeAtoms = ns.search(poly[residue]["CA"].coord, searchRadius)
                         numCloseAtoms = len(closeAtoms)
 
                         #if (chain, poly[residue].id) in dssp:
                         #    secondary = Bio.PDB.DSSP.ss_to_index(dssp[(chain, poly[residue].id)][2])
                         #    energyList = list(dssp[(chain, poly[residue].id)][6:])
 
-                        result[poly[residue].id[1]] = [res, resCode, phi, psi, depth, numCloseAtoms] # + [secondary] + energyList
+                        result[poly[residue].id[1]] = [res, resCode, x, y, z, phi, psi, depth, numCloseAtoms] # + [secondary] + energyList
     print(result)
     return result
 
