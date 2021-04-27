@@ -7,8 +7,7 @@ from Bio.PDB.ResidueDepth import residue_depth, get_surface
 from Bio.PDB.DSSP import DSSP
 from Bio.PDB import Selection
 from Bio.PDB.PDBList import PDBList
-#outputs dictionary indexed by ("group name", index)
-#from pka_processing.py import get_pka_dict
+from pka_processing.py import get_pka_dict
 
 #keys = AA index
 #values = [residue, residue code, x, y, z, phi, psi, surface depth, 
@@ -17,10 +16,16 @@ from Bio.PDB.PDBList import PDBList
 #          NH_O_1_relidx, NH_O_1_energy, O_NH_1_relidx, O_NH_1_energy,
 #          NH_O_2_relidx, NH_O_2_energy, O_NH_2_relidx, O_NH_2_energy]
 
+################################################################################
 #https://www.kosbie.net/cmu/spring-15/15-112/notes/notes-functions-redux-and-web-and-file-io.html
 def readFile(filename, mode="rt"):
     with open(filename, mode) as fin:
         return fin.read()
+
+def writeFile(path, contents):
+    with open(path, "wt") as f:
+        f.write(contents)
+###############################################################################
 
 result = {}
 structName = "1HMP"
@@ -58,7 +63,6 @@ def readPDBFile(structName, fileName):
                     if poly[residue].id[1] not in result:
 
                         res = poly[residue].resname
-                        x,y,z = poly[residue]["CA"].coord
 
                         #encoded as int from 0-1
                         resCode = Bio.PDB.Polypeptide.three_to_index(poly[residue].resname)/20
@@ -89,41 +93,156 @@ def readPDBFile(structName, fileName):
                             else:
                                 curNonPolar.add(currentRes)
 
-                        #if (chain, poly[residue].id) in dssp:
-                        #    secondary = Bio.PDB.DSSP.ss_to_index(dssp[(chain, poly[residue].id)][2])
-                        #    energyList = list(dssp[(chain, poly[residue].id)][6:])
+                        if (chain, poly[residue].id) in dssp:
+                            secondary = (Bio.PDB.DSSP.ss_to_index(dssp[(chain, poly[residue].id)][2]))/7
+                            energyList = list(dssp[(chain, poly[residue].id)][6:])
 
-                        result[poly[residue].id[1]] = [res, resCode, x, y, z, phi, psi, depth, 
-                                                        len(residues), len(curCharged), len(curPolar), len(curNonPolar)] 
-                                                        # + [secondary] + energyList
-    print(result)
+                        featuresList = [resCode, phi, psi, depth, 
+                                        len(residues), len(curCharged), len(curPolar), len(curNonPolar)] + [secondary] + energyList
+
+                        if None not in featuresList: #removes residues for which phi/psi cannot be calculated
+                            result[poly[residue].id[1]] = featuresList
     return result
-
-#readPDBFile(structName, fileName)
-
-string = """966c    A       1.90    BS06    RS2     A       1       N180 L181 A182 V215 H218 E219 H222 H228 L235 Y237 P238 S239 Y240 T241   N73 L74 A75 V108 H111 E112 H115 H121 L128 Y130 P131 S132 Y133 T134      M236 E219;E219  M129 E112;E112  3.4.24.-        0004222,0006508,0008237,0008270,0031012         ki=23nM (RS2)   Ki=23nM (RS2)           P03956  10074939        RWEQTHLTYRIENYTPDLPRADVDHAIEKAFQLWSNVTPLTFTKVSEGQADIMISFVRGDHRDNSPFDGPGGNLAHAFQPGPGIGGDAHFDEDERWTNNFREYNLHRVAAHELGHSLGLSHSTDIGALMYPSYTFSGDVQLAQDDIDGIQAIYGRSQ"""
 
 pdbList = PDBList()
 
+#returns dict mapping PDB ID to (input array, binding output list, catalytic output list)
 def readAnnotations(path):
-    #string = readFile(path)
+    result = dict()
+
+    string = readFile(path)
     for protein in string.splitlines():
+        
+        #parsing ANNOTATIONS file table
         elems = protein.split("  ")
         elems.remove("")
         elems = [i for i in elems if i != ""]
-        print(elems)
         PDBId = elems[0]
-        print("PDB ID", PDBId)
+        print("extracting features for PDB ID: ", PDBId)
+
+        #retrieve PDB file and create features list
         PDBFile = pdbList.retrieve_pdb_file(pdb_code = PDBId, file_format = "pdb")
         features = readPDBFile(PDBId, PDBFile)
+
+        #integrate pKa 
+        pkaDict = get_pka_dict(PDBFile)
+
+        for key in features:
+            features[key].append(99.999)
+
+        for (group, res) in pKaDict:
+            pka = pkaDict[(group,res)]
+            if pka != None and res in features:
+                features[res][-1] = pka/99.999
+
+        lenProtein = len(features)
+        resOrder = sorted(features.keys())
+        inputList = []
+        for key in resOrder:
+            inputList.append(features[key])
+
+        #creates 1D output lists for binding and catalytic sites
         binding = elems[7]
         catalytic = elems[9]
         resBinding = [0 for i in range(len(features))]
         resCat = [0 for i in range(len(features))]
-        for res in binding:
-            index = int(res.strip()[1:])
-            
 
+        for site in binding.split(";"):
+            for res in site.split():
+                resId = int(res.strip()[1:])
+                resBinding[resOrder.index(resId)] = 1
+        for site in catalytic.split(";"):
+            for res in site.split():
+                resId = int(res.strip()[1:])
+                resCat[resOrder.index(resId)] = 1
 
-         
+        result[PDBId] = (inputList, resBinding, resCat)
+        writeToFile(PDBId, inputList, resBinding, resCat)
+
+    normalize(result)
+
+    return result
+
+def normalize(proteinDict):
+    maxSurfaceDepth = 0
+    maxTotal = 0
+    maxPolar = 0
+    maxCharged = 0
+    maxNonPolar = 0
+    for protein in proteinDict:
+        for residue in proteinDict[protein][0]:
+
+            surfaceDepth = residue[3]
+            if surfaceDepth > maxSurfaceDepth:
+                maxSurfaceDepth = surfaceDepth
+
+            numAtoms = residue[4:8]
+            if numAtoms[0] > maxTotal:
+                maxTotal = numAtoms[0]
+            if numAtoms[1] > maxCharged:
+                maxCharged = numAtoms[1]
+            if numAtoms[2] > maxPolar:
+                maxPolar = numAtoms[2]
+            if numAtoms[3] > maxNonPolar:
+                maxNonPolar = numAtoms[3] 
+    for protein in proteinDict:
+        for residue in proteinDict[protein][0]:
+            residue[3] /= maxSurfaceDepth
+            residue[4] /= maxTotal
+            residue[5] /= maxCharged
+            residue[6] /= maxPolar
+            residue[7] /= maxNonPolar
+
+def writeToFile(id, inputList, output1, output2):
+    string = ""
+    string += "---> input" + "\n"
+    for line in inputList:
+        for item in line:
+            string += str(item) + ","
+        string = string[:-1] + "\n"
+    string += "---> binding residues" + "\n"
+    for line in output1:
+        string += str(line) + "\n"
+    string += "---> catalytic residues" +"\n"
+    for line in output2:
+        string += str(line) + "\n"
+    path = "TrainingData" + "\\" + str(id) + ".txt"
+    writeFile(path, string)
+
+def readFromFile(path):
+    data = readFile(path)
+    writingInput = False
+    writingOutput1 = False
+    writingOutput2 = False
+    
+    inputList, output1, output2 = [], [], []
+    for line in data.splitlines():
+
+        if "---> input" in line:
+            writingInput = True
+        elif "---> binding residues" in line:
+            writingOutput1 = True
+            writingInput = False
+        elif "---> catalytic residues" in line:
+            writingOutput2 = True
+            writingOutput1 = False
+        
+        else:
+
+            if writingInput:
+                row = []
+                for item in line.split(","):
+                    row.append(float(item))
+                inputList.append(row)
+            elif writingOutput1:
+                for item in line.split(","):
+                    output1.append(int(item))
+            else:
+                for item in line.split(","):
+                    output2.append(int(item))
+
+    return (inputList, output1, output2)
+
+readFromFile("TrainingData\966c.txt")
+
 readAnnotations("HI")
