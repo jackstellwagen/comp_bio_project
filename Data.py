@@ -6,6 +6,9 @@ from Bio import PDB
 from Bio.PDB.ResidueDepth import residue_depth, get_surface
 from Bio.PDB.DSSP import DSSP
 from Bio.PDB import Selection
+from Bio.PDB.PDBList import PDBList
+#outputs dictionary indexed by ("group name", index)
+#from pka_processing.py import get_pka_dict
 
 #keys = AA index
 #values = [residue, residue code, x, y, z, phi, psi, surface depth, 
@@ -13,6 +16,11 @@ from Bio.PDB import Selection
 #          num polar residues, num non-polar residues, secondary structure, 
 #          NH_O_1_relidx, NH_O_1_energy, O_NH_1_relidx, O_NH_1_energy,
 #          NH_O_2_relidx, NH_O_2_energy, O_NH_2_relidx, O_NH_2_energy]
+
+#https://www.kosbie.net/cmu/spring-15/15-112/notes/notes-functions-redux-and-web-and-file-io.html
+def readFile(filename, mode="rt"):
+    with open(filename, mode) as fin:
+        return fin.read()
 
 result = {}
 structName = "1HMP"
@@ -91,5 +99,31 @@ def readPDBFile(structName, fileName):
     print(result)
     return result
 
+#readPDBFile(structName, fileName)
 
-readPDBFile(structName, fileName)
+string = """966c    A       1.90    BS06    RS2     A       1       N180 L181 A182 V215 H218 E219 H222 H228 L235 Y237 P238 S239 Y240 T241   N73 L74 A75 V108 H111 E112 H115 H121 L128 Y130 P131 S132 Y133 T134      M236 E219;E219  M129 E112;E112  3.4.24.-        0004222,0006508,0008237,0008270,0031012         ki=23nM (RS2)   Ki=23nM (RS2)           P03956  10074939        RWEQTHLTYRIENYTPDLPRADVDHAIEKAFQLWSNVTPLTFTKVSEGQADIMISFVRGDHRDNSPFDGPGGNLAHAFQPGPGIGGDAHFDEDERWTNNFREYNLHRVAAHELGHSLGLSHSTDIGALMYPSYTFSGDVQLAQDDIDGIQAIYGRSQ"""
+
+pdbList = PDBList()
+
+def readAnnotations(path):
+    #string = readFile(path)
+    for protein in string.splitlines():
+        elems = protein.split("  ")
+        elems.remove("")
+        elems = [i for i in elems if i != ""]
+        print(elems)
+        PDBId = elems[0]
+        print("PDB ID", PDBId)
+        PDBFile = pdbList.retrieve_pdb_file(pdb_code = PDBId, file_format = "pdb")
+        features = readPDBFile(PDBId, PDBFile)
+        binding = elems[7]
+        catalytic = elems[9]
+        resBinding = [0 for i in range(len(features))]
+        resCat = [0 for i in range(len(features))]
+        for res in binding:
+            index = int(res.strip()[1:])
+            
+
+
+         
+readAnnotations("HI")
